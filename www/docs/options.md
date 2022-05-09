@@ -211,7 +211,7 @@ The path for call data JSON file. For example, `-D /home/user/file.json` or `-D 
 
 The call data comes as serialized protocol buffer messages read from standard input. 
 
-We support two formats of binary data: single message and multiple count-delimited messages. See [writing a message](https://developers.google.com/protocol-buffers/docs/gotutorial#writing-a-message) on how to serialize a single message. 
+We support two formats of binary data: single message and multiple count-delimited messages. See [writing a message](https://developers.google.com/protocol-buffers/docs/gotutorial#writing_a_message) on how to serialize a single message. 
 
 For multiple messages prefix each message with its length in bytes. See [streaming multiple messages](https://developers.google.com/protocol-buffers/docs/techniques#streaming) in protobuf documentation.
 
@@ -309,6 +309,14 @@ Results in the following data sent:
 
 Reflect metadata as stringified JSON used only for reflection request.
 
+### `--max-recv-message-size`
+
+Maximum message size the client can receive. Can be specified as bytes, or using [human readable value](https://pkg.go.dev/github.com/dustin/go-humanize#ParseBytes) such as `42 MB`.
+
+### `--max-send-message-size`
+
+Maximum message size the client can send. Can be specified as bytes, or using [human readable value](https://pkg.go.dev/github.com/dustin/go-humanize#ParseBytes) such as `42 MB`.
+
 ### `-o`, `--output`
 
 Output path. If none is provided by default we print to standard output (stdout).
@@ -323,6 +331,7 @@ Output type. If none provided, a summary is printed.
 - `"html"` - outputs the metrics report as HTML.
 - `"influx-summary"` - outputs the metrics summary as InfluxDB line protocol.
 - `"influx-details"` - outputs the metrics details as InfluxDB line protocol.
+- `"prometheus"` - outputs the metrics summary in Prometheus exposition format.
 
 See [output formats page](output.md) for details.
 

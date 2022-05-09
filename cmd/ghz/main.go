@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/alecthomas/kingpin"
+	"github.com/dustin/go-humanize"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -207,7 +208,7 @@ var (
 
 	isFormatSet = false
 	format      = kingpin.Flag("format", "Output format. One of: summary, csv, json, pretty, html, influx-summary, influx-details. Default is summary.").
-			Short('O').Default("summary").PlaceHolder(" ").IsSetByUser(&isFormatSet).Enum("summary", "csv", "json", "pretty", "html", "influx-summary", "influx-details")
+			Short('O').Default("summary").PlaceHolder(" ").IsSetByUser(&isFormatSet).Enum("summary", "csv", "json", "pretty", "html", "influx-summary", "influx-details", "prometheus")
 
 	isSkipFirstSet = false
 	skipFirst      = kingpin.Flag("skipFirst", "Skip the first X requests when doing the results tally.").
@@ -248,9 +249,6 @@ var (
 	debug      = kingpin.Flag("debug", "The path to debug log file.").
 			PlaceHolder(" ").IsSetByUser(&isDebugSet).String()
 
-	isHostSet = false
-	host      = kingpin.Arg("host", "Host and port to test.").String()
-
 	isEnableCompressionSet = false
 	enableCompression      = kingpin.Flag("enable-compression", "Enable Gzip compression on requests.").
 				Short('e').Default("false").IsSetByUser(&isEnableCompressionSet).Bool()
@@ -258,6 +256,19 @@ var (
 	isLBStrategySet = false
 	lbStrategy      = kingpin.Flag("lb-strategy", "Client load balancing strategy.").
 			PlaceHolder(" ").IsSetByUser(&isLBStrategySet).String()
+
+	// message size
+	isMaxRecvMsgSizeSet = false
+	maxRecvMsgSize      = kingpin.Flag("max-recv-message-size", "Maximum message size the client can receive.").
+				PlaceHolder(" ").IsSetByUser(&isMaxRecvMsgSizeSet).String()
+
+	isMaxSendMsgSizeSet = false
+	maxSendMsgSize      = kingpin.Flag("max-send-message-size", "Maximum message size the client can send.").
+				PlaceHolder(" ").IsSetByUser(&isMaxSendMsgSizeSet).String()
+
+	// host main argument
+	isHostSet = false
+	host      = kingpin.Arg("host", "Host and port to test.").String()
 )
 
 func main() {
@@ -304,8 +315,8 @@ func main() {
 		options = append(options, runner.WithLogger(logger))
 	}
 
-	if isLBStrategySet && cfg.Host != "" && !strings.HasPrefix(cfg.Host, "dns:///") {
-		logger.Warn("Load balancing strategy set without using DNS (dns:///) scheme. Strategy: %v. Host: %+v.", cfg.LBStrategy, cfg.Host)
+	if logger != nil && isLBStrategySet && cfg.Host != "" && !strings.HasPrefix(cfg.Host, "dns:///") {
+		logger.Warnw("Load balancing strategy set without using DNS (dns:///) scheme", "strategy", cfg.LBStrategy, "host", cfg.Host)
 	}
 
 	if logger != nil {
@@ -397,14 +408,14 @@ func createConfigFromArgs(cfg *runner.Config) error {
 	*md = strings.TrimSpace(*md)
 	if *md != "" {
 		if err := json.Unmarshal([]byte(*md), &metadata); err != nil {
-			return fmt.Errorf("Error unmarshaling metadata '%v': %v", *md, err.Error())
+			return fmt.Errorf("error unmarshaling metadata '%v': %v", *md, err.Error())
 		}
 	}
 
 	var dataObj interface{}
 	if *data != "@" && strings.TrimSpace(*data) != "" {
 		if err := json.Unmarshal([]byte(*data), &dataObj); err != nil {
-			return fmt.Errorf("Error unmarshaling data '%v': %v", *data, err.Error())
+			return fmt.Errorf("error unmarshaling data '%v': %v", *data, err.Error())
 		}
 	}
 
@@ -412,7 +423,7 @@ func createConfigFromArgs(cfg *runner.Config) error {
 	*tags = strings.TrimSpace(*tags)
 	if *tags != "" {
 		if err := json.Unmarshal([]byte(*tags), &tagsMap); err != nil {
-			return fmt.Errorf("Error unmarshaling tags '%v': %v", *tags, err.Error())
+			return fmt.Errorf("error unmarshaling tags '%v': %v", *tags, err.Error())
 		}
 	}
 
@@ -420,7 +431,21 @@ func createConfigFromArgs(cfg *runner.Config) error {
 	*rmd = strings.TrimSpace(*rmd)
 	if *rmd != "" {
 		if err := json.Unmarshal([]byte(*rmd), &rmdMap); err != nil {
-			return fmt.Errorf("Error unmarshaling reflection metadata '%v': %v", *rmd, err.Error())
+			return fmt.Errorf("error unmarshaling reflection metadata '%v': %v", *rmd, err.Error())
+		}
+	}
+
+	if isMaxRecvMsgSizeSet {
+		_, err := humanize.ParseBytes(*maxRecvMsgSize)
+		if err != nil {
+			return errors.New("invalid max call recv message size: " + err.Error())
+		}
+	}
+
+	if isMaxSendMsgSizeSet {
+		_, err := humanize.ParseBytes(*maxSendMsgSize)
+		if err != nil {
+			return errors.New("invalid max call send message size: " + err.Error())
 		}
 	}
 
@@ -480,6 +505,8 @@ func createConfigFromArgs(cfg *runner.Config) error {
 	cfg.CMaxDuration = runner.Duration(*cMaxDuration)
 	cfg.CountErrors = *countErrors
 	cfg.LBStrategy = *lbStrategy
+	cfg.MaxCallRecvMsgSize = *maxRecvMsgSize
+	cfg.MaxCallSendMsgSize = *maxSendMsgSize
 
 	return nil
 }
@@ -721,6 +748,16 @@ func mergeConfig(dest *runner.Config, src *runner.Config) error {
 
 	if isCMaxDurSet {
 		dest.CMaxDuration = src.CMaxDuration
+	}
+
+	// message size
+
+	if isMaxRecvMsgSizeSet {
+		dest.MaxCallRecvMsgSize = src.MaxCallRecvMsgSize
+	}
+
+	if isMaxSendMsgSizeSet {
+		dest.MaxCallSendMsgSize = src.MaxCallSendMsgSize
 	}
 
 	return nil

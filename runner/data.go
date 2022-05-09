@@ -99,9 +99,12 @@ func newDataProvider(mtd *desc.MethodDescriptor,
 
 	// Test if we can preseed data
 	ctd := newCallData(mtd, funcs, "", 0)
-	ha, err := ctd.hasAction(string(dp.data))
-	if err != nil {
-		return nil, err
+	ha := false
+	if !dp.binary {
+		ha, err = ctd.hasAction(string(dp.data))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	dp.hasActions = ha
@@ -138,7 +141,7 @@ func (dp *dataProvider) getDataForCall(ctd *CallData) ([]*dynamic.Message, error
 		return nil, err
 	}
 
-	if !dp.mtd.IsClientStreaming() {
+	if !dp.mtd.IsClientStreaming() && len(inputs) > 0 {
 		inputIdx := int(ctd.RequestNumber % int64(len(inputs)))
 		unaryInput := inputs[inputIdx]
 

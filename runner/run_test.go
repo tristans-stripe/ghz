@@ -10,6 +10,7 @@ import (
 	"github.com/bojand/ghz/internal"
 	"github.com/bojand/ghz/internal/helloworld"
 	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
@@ -109,6 +110,37 @@ func TestRunUnary(t *testing.T) {
 		parsed, err := uuid.Parse(msg.GetName())
 		assert.NoError(t, err)
 		assert.NotEmpty(t, parsed)
+	})
+
+	t.Run("test sprig template functions", func(t *testing.T) {
+		gs.ResetCounters()
+
+		data := make(map[string]interface{})
+		data["name"] = "{{ `test` | upper | repeat 5 }}"
+
+		report, err := Run(
+			"helloworld.Greeter.SayHello",
+			internal.TestLocalhost,
+			WithProtoFile("../testdata/greeter.proto", []string{}),
+			WithTotalRequests(1),
+			WithConcurrency(1),
+			WithTimeout(time.Duration(20*time.Second)),
+			WithData(data),
+			WithInsecure(true),
+		)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, report)
+
+		count := gs.GetCount(callType)
+		assert.Equal(t, 1, count)
+
+		calls := gs.GetCalls(callType)
+		assert.NotNil(t, calls)
+		assert.Len(t, calls, 1)
+
+		msg := calls[0][0]
+		assert.Equal(t, msg.GetName(), "TESTTESTTESTTESTTEST")
 	})
 
 	t.Run("test custom template functions", func(t *testing.T) {
@@ -3112,6 +3144,30 @@ func TestRunWrappedUnary(t *testing.T) {
 		assert.Equal(t, report.Average, report.Fastest)
 	})
 
+	t.Run("wrapped bin data with template chars", func(t *testing.T) {
+		protoMsg := wrappers.BytesValue{Value: []byte{'\x7b', '\x7b', '\xc2', '\x7d', '\x7d'}}
+		msg, err := proto.Marshal(&protoMsg)
+		assert.NoError(t, err)
+
+		report, err := Run(
+			"wrapped.WrappedService.GetBytesMessage",
+			internal.TestLocalhost,
+			WithProtoFile("../testdata/wrapped.proto", []string{"../testdata"}),
+			WithTotalRequests(1),
+			WithConcurrency(1),
+			WithTimeout(time.Duration(20*time.Second)),
+			WithDialTimeout(time.Duration(20*time.Second)),
+			WithBinaryData(msg),
+			WithInsecure(true),
+		)
+
+		assert.NoError(t, err)
+
+		assert.NotNil(t, report)
+
+		assert.Equal(t, 1, int(report.Count))
+	})
+
 	t.Run("json string data from file", func(t *testing.T) {
 		report, err := Run(
 			"wrapped.WrappedService.GetMessage",
@@ -3146,6 +3202,38 @@ func TestRunWrappedUnary(t *testing.T) {
 		assert.Equal(t, report.Average, report.Slowest)
 		assert.Equal(t, report.Average, report.Fastest)
 	})
+
+	t.Run("json string data from empty file", func(t *testing.T) {
+		report, err := Run(
+			"wrapped.WrappedService.GetMessage",
+			internal.TestLocalhost,
+			WithProtoFile("../testdata/wrapped.proto", []string{"../testdata"}),
+			WithDataFromFile(`../testdata/data_empty.json`),
+			WithInsecure(true),
+		)
+
+		assert.Error(t, err)
+
+		assert.NotNil(t, report)
+
+		assert.Equal(t, 0, int(report.Count))
+		assert.Zero(t, report.Average)
+		assert.Zero(t, report.Fastest)
+		assert.Zero(t, report.Slowest)
+		assert.Zero(t, report.Rps)
+		assert.Empty(t, report.Name)
+		assert.NotEmpty(t, report.Date)
+		assert.NotEmpty(t, report.Options)
+		assert.Empty(t, report.Details)
+		assert.Equal(t, true, report.Options.Insecure)
+		assert.Empty(t, report.LatencyDistribution)
+		assert.Equal(t, ReasonNormalEnd, report.EndReason)
+		assert.Empty(t, report.ErrorDist)
+
+		assert.Equal(t, report.Average, report.Slowest)
+		assert.Equal(t, report.Average, report.Fastest)
+	})
+
 }
 
 func TestRunGtimeUnary(t *testing.T) {

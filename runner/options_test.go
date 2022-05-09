@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
 )
 
 func TestRunConfig_newRunConfig(t *testing.T) {
@@ -275,6 +276,17 @@ func TestRunConfig_newRunConfig(t *testing.T) {
 		assert.Equal(t, c.enableCompression, false)
 	})
 
+	t.Run("with binary data from file and dynamic message", func(t *testing.T) {
+		c, err := NewConfig("call", "localhost:50050",
+			WithProtoFile("testdata/data.proto", []string{}),
+			WithBinaryDataFromFile("../testdata/hello_request_data.bin"),
+			WithStreamDynamicMessages(true),
+		)
+
+		assert.Error(t, err)
+		assert.Nil(t, c)
+	})
+
 	t.Run("with data from file", func(t *testing.T) {
 		c, err := NewConfig("call", "localhost:50050",
 			WithProtoFile("testdata/data.proto", []string{}),
@@ -483,6 +495,25 @@ func TestRunConfig_newRunConfig(t *testing.T) {
 		)
 
 		assert.Error(t, err)
+	})
+
+	t.Run("with max size", func(t *testing.T) {
+		c, err := NewConfig("  call  ", "  localhost:50050  ",
+			WithProtoFile("testdata/data.proto", []string{}),
+			WithDefaultCallOptions(
+				[]grpc.CallOption{
+					grpc.MaxCallSendMsgSize(1024000),
+					grpc.MaxCallRecvMsgSize(2048000),
+				},
+			),
+		)
+
+		assert.NoError(t, err)
+
+		assert.Equal(t, []grpc.CallOption{
+			grpc.MaxCallSendMsgSize(1024000),
+			grpc.MaxCallRecvMsgSize(2048000),
+		}, c.defaultCallOptions)
 	})
 
 	t.Run("with load step", func(t *testing.T) {
